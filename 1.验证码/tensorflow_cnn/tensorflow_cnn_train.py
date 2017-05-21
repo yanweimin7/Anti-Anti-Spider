@@ -6,14 +6,15 @@ from gen_captcha import ALPHABET
 
 import numpy as np
 import tensorflow as tf
+import os
 
 text, image = gen_captcha_text_and_image() #先生成验证码和文字测试模块是否完全
-print("验证码图像channel:", image.shape)  # (60, 160, 3)
+#print("验证码图像channel:", image.shape)  # (60, 160, 3)
 # 图像大小
 IMAGE_HEIGHT = 60
 IMAGE_WIDTH = 160
 MAX_CAPTCHA = len(text)
-print("验证码文本最长字符数", MAX_CAPTCHA)   # 验证码最长4字符; 我全部固定为4,可以不固定. 如果验证码长度小于4，用'_'补齐
+#print("验证码文本最长字符数", MAX_CAPTCHA)   # 验证码最长4字符; 我全部固定为4,可以不固定. 如果验证码长度小于4，用'_'补齐
 
 # 把彩色图像转为灰度图像（色彩对识别验证码没有什么用）
 def convert2gray(img):
@@ -96,8 +97,9 @@ def get_next_batch(batch_size=128):
 		''' 获取一张图，判断其是否符合（60，160，3）的规格'''
 		while True:
 			text, image = gen_captcha_text_and_image()
-			if image.shape == (60, 160, 3):#此部分应该与开头部分图片宽高吻合
-				return text, image
+			image = np.pad(image, ((12, 12), (20, 20)), 'constant', constant_values = (255,))  # 在图像上补2行，下补3行，左补2行，右补2行
+			# if image.shape == (60, 160, 3):#此部分应该与开头部分图片宽高吻合
+			return text, image
 
 	for i in range(batch_size):
 		text, image = wrap_gen_captcha_text_and_image()
@@ -175,7 +177,10 @@ def train_crack_captcha_cnn():
 
 	saver = tf.train.Saver()
 	with tf.Session() as sess:
-		sess.run(tf.global_variables_initializer())
+		if os.path.exists('model/checkpoint'):  # 判断模型是否存在
+			saver.restore(sess, 'model/model.ckpt')  # 存在就从模型中恢复变量
+		else:
+		    sess.run(tf.global_variables_initializer())
 
 		step = 0
 		while True:
@@ -187,7 +192,10 @@ def train_crack_captcha_cnn():
 			if step % 100 == 0:
 				batch_x_test, batch_y_test = get_next_batch(100)
 				acc = sess.run(accuracy, feed_dict={X: batch_x_test, Y: batch_y_test, keep_prob: 1.})
+				print('--------START---------')
 				print(step, acc)
+				print('--------END---------')
+				save_path = saver.save(sess, 'model/model.ckpt')  # 保存模型到model/model.ckpt，注意一定要有一层文件夹，否则保存不成功！！！
 				# 如果准确率大于50%,保存模型,完成训练
 				if acc > 0.5:
 					saver.save(sess, "crack_capcha.model", global_step=step)
